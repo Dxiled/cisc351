@@ -1,0 +1,164 @@
+---
+title: "Assignment 1 - Derek Xu"
+output: html_notebook
+---
+
+```{r}
+require(forecast)
+require(ggplot2)
+require(Metrics)
+require(tseries)
+require(tidyverse)
+```
+
+
+RQ1.1: Choosing Brooklyn and Staten Island as the two boroughs since they seem to
+be relatively close in terms of average price (just by eyeballing, not sure how accurate
+that is). This will eliminate some bias while working with an overall dataset.
+
+The following code reads all the data from 2018 to 2020 for the two boroughs.
+Then, it cleans up the data by standardizing the column names, converting the 
+prices to integers and the dates days since 2018-01-01, using R's built in date manipulation
+
+```{r}
+# Reading the .csv files
+brooklyn2018 <- read.csv("Assignment1-dataset/2018_brooklyn.csv")
+brooklyn2019 <- read.csv("Assignment1-dataset/2019_brooklyn.csv")
+brooklyn2020 <- read.csv("Assignment1-dataset/2020_brooklyn.csv")
+
+staten2018 <- read.csv("Assignment1-dataset/2018_statenisland.csv")
+staten2019 <- read.csv("Assignment1-dataset/2019_statenisland.csv")
+staten2020 <- read.csv("Assignment1-dataset/2020_statenisland.csv")
+
+# Standardizing the column names - some of the .csv files have trailing spaces 
+# while others don't. The data contained in the columns is consistent across years,
+# so it's simple to just override the column names.
+names(brooklyn2019) <- names(brooklyn2018)
+names(brooklyn2020) <- names(brooklyn2018)
+
+names(staten2018) <- names(brooklyn2018)
+names(staten2020) <- names(brooklyn2018)
+names(staten2020) <- names(brooklyn2018)
+
+#Converts various columns from string format to usable data types.
+brooklyn2018$SALE.PRICE. <- as.integer(gsub("\\D", "", sub("P.*", "", brooklyn2018$SALE.PRICE.)))
+brooklyn2019$SALE.PRICE. <- as.integer(gsub("\\D", "", sub("P.*", "", brooklyn2019$SALE.PRICE.)))
+brooklyn2020$SALE.PRICE. <- as.integer(gsub("\\D", "", sub("P.*", "", brooklyn2020$SALE.PRICE.)))
+
+staten2018$SALE.PRICE. <- as.integer(gsub("\\D", "", sub("P.*", "", staten2018$SALE.PRICE.)))
+staten2019$SALE.PRICE. <- as.integer(gsub("\\D", "", sub("P.*", "", staten2019$SALE.PRICE.)))
+staten2020$SALE.PRICE. <- as.integer(gsub("\\D", "", sub("P.*", "", staten2020$SALE.PRICE.)))
+
+brooklyn2018$LAND.SQUARE.FEET. <- as.integer(gsub("\\D", "", sub("P.*", "", brooklyn2018$LAND.SQUARE.FEET.)))
+brooklyn2019$LAND.SQUARE.FEET. <- as.integer(gsub("\\D", "", sub("P.*", "", brooklyn2019$LAND.SQUARE.FEET.)))
+brooklyn2020$LAND.SQUARE.FEET. <- as.integer(gsub("\\D", "", sub("P.*", "", brooklyn2020$LAND.SQUARE.FEET.)))
+
+staten2018$LAND.SQUARE.FEET. <- as.integer(gsub("\\D", "", sub("P.*", "", staten2018$LAND.SQUARE.FEET.)))
+staten2019$LAND.SQUARE.FEET. <- as.integer(gsub("\\D", "", sub("P.*", "", staten2019$LAND.SQUARE.FEET.)))
+staten2020$LAND.SQUARE.FEET. <- as.integer(gsub("\\D", "", sub("P.*", "", staten2020$LAND.SQUARE.FEET.)))
+
+brooklyn2018$GROSS.SQUARE.FEET. <- as.integer(gsub("\\D", "", sub("P.*", "", brooklyn2018$GROSS.SQUARE.FEET.)))
+brooklyn2019$GROSS.SQUARE.FEET. <- as.integer(gsub("\\D", "", sub("P.*", "", brooklyn2019$GROSS.SQUARE.FEET.)))
+brooklyn2020$GROSS.SQUARE.FEET. <- as.integer(gsub("\\D", "", sub("P.*", "", brooklyn2020$GROSS.SQUARE.FEET.)))
+
+staten2018$GROSS.SQUARE.FEET. <- as.integer(gsub("\\D", "", sub("P.*", "", staten2018$GROSS.SQUARE.FEET.)))
+staten2019$GROSS.SQUARE.FEET. <- as.integer(gsub("\\D", "", sub("P.*", "", staten2019$GROSS.SQUARE.FEET.)))
+staten2020$GROSS.SQUARE.FEET. <- as.integer(gsub("\\D", "", sub("P.*", "", staten2020$GROSS.SQUARE.FEET.)))
+
+brooklyn2018$SALE.DATE. <- as.integer(as.Date(brooklyn2018$SALE.DATE.) - as.Date(c("2018-01-01")))
+brooklyn2019$SALE.DATE. <- as.integer(as.Date(brooklyn2019$SALE.DATE.) - as.Date(c("2018-01-01")))
+brooklyn2020$SALE.DATE. <- as.integer(as.Date(brooklyn2020$SALE.DATE.) - as.Date(c("2018-01-01")))
+
+staten2018$SALE.DATE. <- as.integer(as.Date(staten2018$SALE.DATE.) - as.Date(c("2018-01-01")))
+staten2019$SALE.DATE. <- as.integer(as.Date(staten2019$SALE.DATE.) - as.Date(c("2018-01-01")))
+staten2020$SALE.DATE. <- as.integer(as.Date(staten2020$SALE.DATE.) - as.Date(c("2018-01-01")))
+
+#Clean the data by discarding the entries in which the sale price is zero
+brooklyn2018 <- subset(brooklyn2018, SALE.PRICE. > 1)
+brooklyn2019 <- subset(brooklyn2019, SALE.PRICE. > 1)
+brooklyn2020 <- subset(brooklyn2020, SALE.PRICE. > 1)
+
+staten2018 <- subset(staten2018, SALE.PRICE. > 1)
+staten2019 <- subset(staten2019, SALE.PRICE. > 1)
+staten2020 <- subset(staten2020, SALE.PRICE. > 1)
+
+# Concatenates the various tables into various master tables 
+# This will be useful for calculating overall median values.
+brooklyn <- rbind(brooklyn2018, brooklyn2019, brooklyn2020)
+staten <- rbind(staten2018, staten2019, staten2020)
+master <- rbind(brooklyn, staten)
+master2020 <- rbind(brooklyn2020, staten2020)
+```
+
+RQ1.2:
+Null Hypothesis: The median price of properties in Brooklyn and Staten Island in 2020
+is higher than the overall median price over the past three years (i.e. COVID-19 had no
+impact on the growing housing market).
+Alternative Hypothesis: The median price of properties in Brooklyn and Staten Island in 2020
+is less than or equal to than the overall median price over the past three years (i.e. COVID-19
+had an impact on the housing market in NYC).
+
+RQ1.3: use a one-sample median test to determine the average sale price over the three years
+
+```{r}
+medianoverall <- median(master$SALE.PRICE., na.rm=TRUE)
+median2020 <- median(master2020$SALE.PRICE., na.rm=TRUE)
+
+"Overall median:"
+medianoverall
+"Median for 2020 only:"
+median2020
+```
+
+RQ1.4: The median sale price for 2020 was lower than the overall median price across all three years.
+Thus, we can reject the null hypothesis and say that COVID had an effect on NYC property prices.
+
+RQ2.1: Code is as follows:
+
+```{r}
+# Partitions the 2020 data into 90% training, 10% testing. Seed was obtained from a keyboard mash.
+set.seed(1265764532)
+ss <- sample(1:2,size=nrow(master2020),replace=TRUE,prob=c(0.9,0.1))
+train <- master2020[ss==1,]
+test <- master2020[ss==2,]
+```
+
+RQ2.2: 
+Attributes definitely worth considering:
+- Year Built (effect on both style and construction quality)
+- Land Square Feet, Gross Square Feet (amount of available space has a direct impact on price)
+- Sale Date (Housing market has a generally upwards trend over time)
+- Tax Class (Influences budgeting)
+
+Attributes to immediately dismiss:
+- Address, ZIP Code, Apartment Number (unique for every property, thus has no predictive power)
+- Block, Lot (contains no information without context about the block and lot)
+
+RQ2.3: check for correlations between the attributes we're considering. Draws graphs to visually verify this.
+```{r}
+attributes <- data.frame(master2020$SALE.PRICE.,
+                         master2020$SALE.DATE., 
+                         master2020$YEAR.BUILT.,
+                         master2020$LAND.SQUARE.FEET.,
+                         master2020$GROSS.SQUARE.FEET.,
+                         master2020$TAX.CLASS.AT.TIME.OF.SALE.)
+
+ggplot(attributes, aes(master2020$SALE.PRICE., master2020$SALE.DATE.)) + geom_point()
+ggplot(attributes, aes(master2020$SALE.PRICE., master2020$YEAR.BUILT.)) + geom_point()
+ggplot(attributes, aes(master2020$SALE.PRICE., master2020$LAND.SQUARE.FEET.)) + geom_point()
+ggplot(attributes, aes(master2020$SALE.PRICE., master2020$GROSS.SQUARE.FEET.)) + geom_point()
+```
+
+There seems to be some weak correlations, but no multicolinearity.
+
+RQ3.1: Linear regression model, using all available numeric data:
+
+```{r}
+fit <- lm(SALE.PRICE. ~ SALE.DATE. + YEAR.BUILT. + LAND.SQUARE.FEET. + GROSS.SQUARE.FEET. + RESIDENTIAL.UNITS. + COMMERCIAL.UNITS., data=train)
+summary(fit)
+
+predictions <- predict(fit, test, rm.na=TRUE)
+error = rmse(test$SALE.PRICE., predictions)
+error
+```
+
